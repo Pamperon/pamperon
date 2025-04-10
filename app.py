@@ -14,7 +14,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 st.set_page_config(page_title="NBA Points stats - Over & Under", layout="centered")
 
-st.title("🏀 NBA Points stats - Over & Under")
+st.title("🏀 NBA Points - Over & Under")
 st.markdown("Inserisci il nome di un giocatore NBA e la linea punti per calcolare le percentuali over/under.")
 
 @st.cache_data
