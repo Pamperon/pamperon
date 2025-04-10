@@ -7,13 +7,14 @@ import time
 import requests
 import urllib3
 import matplotlib.pyplot as plt
+import unicodedata
 
 # Disabilita i warning SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-st.set_page_config(page_title="NBA Over/Under", layout="centered")
+st.set_page_config(page_title="NBA Points stats - Over & Under", layout="centered")
 
-st.title("🔢 NBA Over/Under - Statistiche Precisione")
+st.title("🏀 NBA Points stats - Over & Under")
 st.markdown("Inserisci il nome di un giocatore NBA e la linea punti per calcolare le percentuali over/under.")
 
 @st.cache_data
@@ -60,7 +61,10 @@ def calculate_over_stats(df, line):
     percent = round((over_games / total_games) * 100, 1) if total_games > 0 else 0
     return percent, over_games, total_games
 
-def plot_candle_chart(df, line, title, rotate_xticks=45, show_labels=True):
+def normalize_name(name):
+    return unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
+
+def plot_candle_chart(df, line, title, rotate_xticks=45, show_labels=True, show_xticks=True):
     if df.empty:
         st.warning("⚠️ Nessun dato disponibile per il grafico.")
         return
@@ -71,8 +75,8 @@ def plot_candle_chart(df, line, title, rotate_xticks=45, show_labels=True):
     colors = ['#00C853' if pts > line else '#D50000' for pts in df['PTS']]
 
     bars = ax.bar(labels, df['PTS'], color=colors, width=0.6)
-    for bar, val in zip(bars, df['PTS']):
-        if show_labels:
+    if show_labels:
+        for bar, val in zip(bars, df['PTS']):
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5, f"{val:.0f}", ha='center', va='bottom', fontsize=9, color='white', weight='bold')
 
     ax.axhline(line, color='gray', linestyle='--', linewidth=1.5, label=f'Linea {line}')
@@ -85,8 +89,12 @@ def plot_candle_chart(df, line, title, rotate_xticks=45, show_labels=True):
     ax.xaxis.label.set_color('white')
     ax.yaxis.label.set_color('white')
     ax.title.set_color('white')
-    ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(labels, rotation=rotate_xticks, ha='right')
+    if show_xticks:
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, rotation=rotate_xticks, ha='right')
+    else:
+        ax.set_xticks([])
+        ax.set_xticklabels([])
     ax.legend(facecolor='#111111', edgecolor='white', labelcolor='white')
     st.pyplot(fig)
 
@@ -95,7 +103,8 @@ def plot_candle_chart(df, line, title, rotate_xticks=45, show_labels=True):
 player_name_input = st.text_input("🔍 Inserisci il nome del giocatore (es: LeBron James)")
 
 if player_name_input:
-    matched_players = [p for p in players.get_active_players() if player_name_input.lower() in p['full_name'].lower()]
+    normalized_input = normalize_name(player_name_input)
+    matched_players = [p for p in players.get_active_players() if normalized_input in normalize_name(p['full_name'])]
 
     if len(matched_players) == 0:
         st.error("❌ Nessun giocatore trovato con questo nome.")
@@ -114,6 +123,16 @@ if player_name_input:
         if len(df) == 0:
             st.warning("⚠️ Nessuna partita trovata per questo giocatore nella stagione 2024/25.")
         else:
+            st.subheader("📈 Visualizza il grafico punti")
+            chart_range = st.selectbox("Seleziona l'intervallo del grafico", ["Ultime 5", "Ultime 10", "Intera stagione"])
+
+            if chart_range == "Ultime 5":
+                plot_candle_chart(df.head(5), line, "Grafico Ultime 5 Partite")
+            elif chart_range == "Ultime 10":
+                plot_candle_chart(df.head(10), line, "Grafico Ultime 10 Partite")
+            elif chart_range == "Intera stagione":
+                plot_candle_chart(df, line, "Grafico Intera Stagione", rotate_xticks=0, show_labels=False, show_xticks=False)
+
             st.subheader(f"📊 Statistiche Over/Under per {selected_player['full_name']} - Linea: {line}")
 
             pct_all, over_all, total_all = calculate_over_stats(df, line)
@@ -125,19 +144,8 @@ if player_name_input:
             pct_5, over_5, _ = calculate_over_stats(df.head(5), line)
             st.write(f"**Ultime 5 partite**: {pct_5}% over ({over_5}/5)")
 
-            # Se selezionato l'avversario, mostra le stat
             if selected_opponent != "Scegli un avversario...":
                 df_all = get_all_gamelogs(player_id)
                 df_vs_next = df_all[df_all['MATCHUP'].str.contains(selected_opponent)]
                 pct_vs, over_vs, total_vs = calculate_over_stats(df_vs_next, line)
                 st.write(f"**Vs {selected_opponent} (carriera)**: {pct_vs}% over ({over_vs}/{total_vs})")
-
-            st.subheader("📈 Visualizza il grafico punti")
-            chart_range = st.selectbox("Seleziona l'intervallo del grafico", ["Intera stagione", "Ultime 10", "Ultime 5"])
-
-            if chart_range == "Intera stagione":
-                plot_candle_chart(df, line, "Grafico Intera Stagione", rotate_xticks=90)
-            elif chart_range == "Ultime 10":
-                plot_candle_chart(df.head(10), line, "Grafico Ultime 10 Partite")
-            elif chart_range == "Ultime 5":
-                plot_candle_chart(df.head(5), line, "Grafico Ultime 5 Partite")
