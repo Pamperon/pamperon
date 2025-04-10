@@ -121,8 +121,7 @@ if player_name_input:
 
         player_id = selected_player['id']
 
-        st.markdown("### 📌 Scegli la metrica da visualizzare")
-        metric = st.radio("", ["Punti", "Assist", "Rimbalzi", "P+A+R"], horizontal=True)
+        metric = st.radio("📌 Scegli la metrica da visualizzare", ["Punti", "Assist", "Rimbalzi", "P+A+R"], horizontal=True)
 
         game_type = st.radio("🎯 Scegli il tipo di partita", ["Totale", "Casa", "Ospite"], horizontal=True)
 
