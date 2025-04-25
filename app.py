@@ -25,43 +25,48 @@ label[data-testid="stWidgetLabel"] > div:empty {
 st.title("🏀 NBA Stats")
 st.markdown("Inserisci il nome di un giocatore NBA e la linea per calcolare le percentuali over/under su punti, assist, rimbalzi e P+A+R.")
 
-@st.cache_data
-def get_team_of_player(player_id):
-    for team in teams.get_teams():
-        try:
-            roster = commonteamroster.CommonTeamRoster(team_id=team['id'], season='2024-25')
-            df_roster = roster.get_data_frames()[0]
-            if player_id in df_roster['PLAYER_ID'].values:
-                return team['id'], team['abbreviation'], team['full_name']
-            time.sleep(0.4)
-        except:
-            continue
-    return None, None, None
+def get_player_id(player_name):
+    # Correzioni manuali per nomi abbreviati o alternativi
+    custom_name_map = {
+        "pj washington": "p.j. washington",
+        "ron holland ii": "ronald holland ii"
+    }
+    norm_input = normalize_name(player_name)
+    corrected_name = custom_name_map.get(norm_input, player_name)
+    norm_name = normalize_name(corrected_name)
+    all_players = players.get_players()
 
-@st.cache_data
-def get_season_gamelog(player_id):
-    gamelog = playergamelog.PlayerGameLog(player_id=player_id, season='2024-25', season_type_all_star='Regular Season')
-    df = gamelog.get_data_frames()[0]
+    # Prima prova: match esatto (case-insensitive, normalizzato)
+    for p in all_players:
+        if normalize_name(p['full_name']) == norm_name:
+            return p['id']
+
+    # Seconda prova: match parziale
+    for p in all_players:
+        if norm_name in normalize_name(p['full_name']):
+            return p['id']
+
+    return None
+
+def get_game_logs(player_id, season='2024-25'):
+    time.sleep(0.6)
+    logs_regular = playergamelog.PlayerGameLog(player_id=player_id, season=season, season_type_all_star='Regular Season')
+    logs_playoffs = playergamelog.PlayerGameLog(player_id=player_id, season=season, season_type_all_star='Playoffs')
+
+    df_regular = logs_regular.get_data_frames()[0]
+    df_playoffs = logs_playoffs.get_data_frames()[0]
+    df = pd.concat([df_regular, df_playoffs], ignore_index=True)
+
+    df['PTS'] = pd.to_numeric(df['PTS'], errors='coerce')
+    df['AST'] = pd.to_numeric(df['AST'], errors='coerce')
+    df['REB'] = pd.to_numeric(df['REB'], errors='coerce')
+    df['PAR'] = df['PTS'] + df['AST'] + df['REB']
     df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'], errors='coerce')
     return df.sort_values(by="GAME_DATE", ascending=False)
 
-@st.cache_data
-def get_all_gamelogs(player_id):
-    all_games = []
-    for year in range(2000, 2025):
-        season = f"{year}-{str(year + 1)[-2:]}"
-        try:
-            log = playergamelog.PlayerGameLog(player_id=player_id, season=season, season_type_all_star='Regular Season')
-            df = log.get_data_frames()[0]
-            df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'], errors='coerce')
-            all_games.append(df)
-            time.sleep(0.4)
-        except:
-            continue
-    if all_games:
-        return pd.concat(all_games).sort_values(by="GAME_DATE", ascending=False)
-    else:
-        return pd.DataFrame()
+def calculate_over_percentage(points_list, line):
+    over = sum(p > line for p in points_list)
+    return round(100 * over / len(points_list), 1) if points_list else 0.0
 
 def calculate_over_stats(df, col, line):
     total_games = len(df)
@@ -71,6 +76,47 @@ def calculate_over_stats(df, col, line):
 
 def normalize_name(name):
     return unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
+
+def get_all_gamelogs(player_id):
+    all_games = []
+    for year in range(2000, 2025):
+        season = f"{year}-{str(year + 1)[-2:]}"
+        try:
+            log = playergamelog.PlayerGameLog(player_id=player_id, season=season, season_type_all_star='Regular Season')
+            df = log.get_data_frames()[0]
+            df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'], format='%Y-%m-%d', errors='coerce')
+            all_games.append(df)
+            time.sleep(0.4)
+        except:
+            continue
+    if all_games:
+        return pd.concat(all_games).sort_values(by="GAME_DATE", ascending=False)
+    else:
+        return pd.DataFrame()
+
+def get_season_gamelog(player_id):
+    gamelog_regular = playergamelog.PlayerGameLog(player_id=player_id, season='2024-25', season_type_all_star='Regular Season')
+    gamelog_playoffs = playergamelog.PlayerGameLog(player_id=player_id, season='2024-25', season_type_all_star='Playoffs')
+
+    df_regular = gamelog_regular.get_data_frames()[0]
+    df_playoffs = gamelog_playoffs.get_data_frames()[0]
+    df = pd.concat([df_regular, df_playoffs], ignore_index=True)
+    df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'], errors='coerce')
+    return df.sort_values(by="GAME_DATE", ascending=False)
+
+@st.cache_data
+def get_all_teams_rosters():
+    rosters = {}
+    for team in teams.get_teams():
+        try:
+            roster = commonteamroster.CommonTeamRoster(team_id=team['id'], season='2024-25')
+            df_roster = roster.get_data_frames()[0]
+            for _, row in df_roster.iterrows():
+                rosters[row['PLAYER_ID']] = team['abbreviation']
+            time.sleep(0.4)
+        except:
+            continue
+    return rosters
 
 def plot_candle_chart(df, col, line, title, rotate_xticks=45, show_labels=True, show_xticks=True):
     if df.empty:
@@ -106,7 +152,76 @@ def plot_candle_chart(df, col, line, title, rotate_xticks=45, show_labels=True, 
     ax.legend(facecolor='#111111', edgecolor='white', labelcolor='white')
     st.pyplot(fig)
 
-# === INTERFACCIA ===
+st.subheader("📥 Carica file Excel per analisi batch")
+
+metric_choice = st.radio("📊 Seleziona la metrica da analizzare", ["Punti", "Assist", "Rimbalzi", "P+A+R"], horizontal=True)
+
+metric_map = {
+    "Punti": "PTS",
+    "Assist": "AST",
+    "Rimbalzi": "REB",
+    "P+A+R": "PAR"
+}
+
+uploaded_file = st.file_uploader("📁 Carica il file Excel con i giocatori e le linee", type=["xlsx"])
+
+if uploaded_file:
+    if 'batch_results' not in st.session_state:
+        input_df = pd.read_excel(uploaded_file)
+        if 'Giocatore' in input_df.columns and 'Linea' in input_df.columns:
+            st.success("File caricato correttamente! 🟢")
+            results = []
+            progress = st.progress(0)
+            for i, row in input_df.iterrows():
+                player_name = row['Giocatore']
+                line = row['Linea']
+                player_id = get_player_id(player_name)
+
+                if player_id:
+                    df_logs = get_game_logs(player_id)
+                    if metric_choice == 'P+A+R':
+                        df_logs['PAR'] = df_logs['PTS'] + df_logs['AST'] + df_logs['REB']
+                    values = df_logs[metric_map[metric_choice]].tolist()
+                    over_5 = calculate_over_percentage(values[:5], line)
+                    over_10 = calculate_over_percentage(values[:10], line)
+                    over_season = calculate_over_percentage(values, line)
+                    all_rosters = get_all_teams_rosters()
+                    team_abbr = all_rosters.get(player_id, 'N/D')
+                    results.append({
+                        'Giocatore': player_name,
+                        'Squadra': team_abbr if team_abbr else 'N/D',
+                        'Linea': line,
+                        '% Over 5G': f"{over_5}%",
+                        '% Over 10G': f"{over_10}%",
+                        '% Over Stagione': f"{over_season}%"
+                    })
+                else:
+                    results.append({
+                        'Giocatore': player_name,
+                        'Squadra': 'N/D',
+                        'Linea': line,
+                        '% Over 5G': 'N/D',
+                        '% Over 10G': 'N/D',
+                        '% Over Stagione': 'N/D'
+                    })
+                progress.progress((i + 1) / len(input_df))
+
+            st.session_state.batch_results = pd.DataFrame(results)
+        else:
+            st.error("❌ Il file deve contenere le colonne 'Giocatore' e 'Linea'.")
+            st.stop()
+
+    results_df = st.session_state.batch_results
+    st.dataframe(results_df)
+    import io
+
+    output_excel = io.BytesIO()
+    results_df.to_excel(output_excel, index=False, engine='openpyxl')
+    output_excel.seek(0)
+    st.download_button("⬇️ Scarica risultati in Excel", data=output_excel, file_name="risultati_over.xlsx")
+
+# === RICERCA GIOCATORE SINGOLO ===
+st.subheader("🔍 Ricerca giocatore singolo")
 
 player_name_input = st.text_input("🔍 Inserisci il nome del giocatore (es: LeBron James)")
 
@@ -143,7 +258,9 @@ if player_name_input:
 
         col = col_map[metric]
         default_lines = {"PTS": 20.5, "AST": 5.5, "REB": 6.5, "PAR": 30.5}
-        line = st.number_input(f"🎯 Inserisci la linea {metric.lower()}", min_value=0.0, max_value=100.0, value=default_lines[col], step=0.5)
+        line = st.number_input(f"🎯 Inserisci la linea {metric.lower()}", min_value=0.0, max_value=100.0, value=default_lines[col], step=1.0)
+        if line % 1 == 0:
+            line += 0.5
 
         st.subheader("📈 Visualizza il grafico")
         chart_range = st.selectbox("Seleziona l'intervallo del grafico", ["Ultime 5", "Ultime 10", "Intera stagione"])
@@ -156,7 +273,7 @@ if player_name_input:
             plot_candle_chart(df, col, line, f"Grafico Intera Stagione - {metric}", rotate_xticks=0, show_labels=False, show_xticks=False)
 
         st.subheader(f"📊 Statistiche {metric.lower()}")
-        st.markdown(f"**{selected_player['full_name']}**\n\nLinea: **{line}**")
+        st.markdown(f"**{selected_player['full_name']}**<br><br>Linea: **{line}**", unsafe_allow_html=True)
 
         pct_5, over_5, _ = calculate_over_stats(df.head(5), col, line)
         st.write(f"**Ultime 5 partite**: {pct_5}% over ({over_5}/5)")
