@@ -1,7 +1,6 @@
 streamlit
 pandas
-matplotlib
 nba_api
-requests
 openpyxl
-
+matplotlib
+beautifulsoup4
