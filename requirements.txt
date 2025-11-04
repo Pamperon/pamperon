@@ -3,3 +3,5 @@ pandas
 matplotlib
 nba_api
 requests
+openpyxl
+
