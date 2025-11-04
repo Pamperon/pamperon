@@ -48,7 +48,7 @@ def get_player_id(player_name):
 
     return None
 
-def get_game_logs(player_id, season='2025-26'):
+def get_game_logs(player_id, season='2024-25'):
     time.sleep(0.6)
     logs_regular = playergamelog.PlayerGameLog(player_id=player_id, season=season, season_type_all_star='Regular Season')
     logs_playoffs = playergamelog.PlayerGameLog(player_id=player_id, season=season, season_type_all_star='Playoffs')
@@ -95,8 +95,8 @@ def get_all_gamelogs(player_id):
         return pd.DataFrame()
 
 def get_season_gamelog(player_id):
-    gamelog_regular = playergamelog.PlayerGameLog(player_id=player_id, season='2025-26', season_type_all_star='Regular Season')
-    gamelog_playoffs = playergamelog.PlayerGameLog(player_id=player_id, season='2025-26', season_type_all_star='Playoffs')
+    gamelog_regular = playergamelog.PlayerGameLog(player_id=player_id, season='2024-25', season_type_all_star='Regular Season')
+    gamelog_playoffs = playergamelog.PlayerGameLog(player_id=player_id, season='2024-25', season_type_all_star='Playoffs')
 
     df_regular = gamelog_regular.get_data_frames()[0]
     df_playoffs = gamelog_playoffs.get_data_frames()[0]
@@ -109,7 +109,7 @@ def get_all_teams_rosters():
     rosters = {}
     for team in teams.get_teams():
         try:
-            roster = commonteamroster.CommonTeamRoster(team_id=team['id'], season='2025-26')
+            roster = commonteamroster.CommonTeamRoster(team_id=team['id'], season='2024-25')
             df_roster = roster.get_data_frames()[0]
             for _, row in df_roster.iterrows():
                 rosters[row['PLAYER_ID']] = team['abbreviation']
@@ -298,4 +298,5 @@ if player_name_input:
             df_vs_next = df_all[df_all['MATCHUP'].str.contains(selected_opponent)]
             pct_vs, over_vs, total_vs = calculate_over_stats(df_vs_next, col, line)
             st.write(f"**Vs {selected_opponent} (carriera)**: {pct_vs}% over ({over_vs}/{total_vs})")
+
 
